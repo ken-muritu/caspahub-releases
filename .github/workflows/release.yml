@@ -48,6 +48,9 @@ jobs:
       - name: Enable R8 shrinking
         run: python3 tool/patch_android_release.py
 
+      - name: Patch manifest for in-app updates
+        run: python3 tool/patch_android_manifest.py
+
       - name: Analyze
         run: flutter analyze
 
