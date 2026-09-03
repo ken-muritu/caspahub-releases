@@ -1,0 +1,77 @@
+name: Build and release CaspaHub app
+
+# This repo is public specifically so these jobs get free/unlimited GitHub Actions
+# minutes even while the main account's billing is blocked (see README) — the actual
+# source lives in the private ken-muritu/caspahub-flutter repo and is pulled in below via
+# a read-only deploy token, never committed here.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch/tag/sha in caspahub-flutter to build"
+        required: false
+        default: "main"
+      release_tag:
+        description: "Tag to publish the build under in THIS repo's Releases"
+        required: true
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private source
+        uses: actions/checkout@v4
+        with:
+          repository: ken-muritu/caspahub-flutter
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.SOURCE_REPO_PAT }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Scaffold platform folders if missing
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --org com.caspahub --project-name caspahub_app .
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Build APK (release, split per ABI)
+        run: flutter build apk --release --split-per-abi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-arm64
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-armv7
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+
+  publish:
+    needs: build-android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Publish release in this (public) repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ inputs.release_tag }}" \
+            dist/apk-arm64/app-arm64-v8a-release.apk \
+            dist/apk-armv7/app-armeabi-v7a-release.apk \
+            --repo "${{ github.repository }}" \
+            --title "${{ inputs.release_tag }}" \
+            --notes "Built from ken-muritu/caspahub-flutter@${{ inputs.ref }}. Source is private; this repo only hosts the build+release while GitHub Actions billing is blocked on the main account."
