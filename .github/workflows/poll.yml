@@ -1,0 +1,53 @@
+name: Poll caspahub-flutter for new commits
+
+# caspahub-flutter's own CI can't auto-trigger anything right now (GitHub Actions is
+# blocked account-wide on billing — see README), so a push-triggered workflow there is a
+# dead end. Instead this repo (public, so its own Actions run fine regardless of that
+# block) polls the private repo's latest commit on a schedule and kicks off a real build +
+# release here whenever it changes. Once billing clears, this whole file stops being
+# necessary — builds can move back to caspahub-flutter's own push-triggered CI.
+on:
+  schedule:
+    - cron: "0 * * * *" # hourly
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check caspahub-flutter's latest commit
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_PAT }}
+        run: |
+          latest=$(gh api repos/ken-muritu/caspahub-flutter/commits/main --jq '.sha')
+          last_built=$(cat .state/last-built-sha.txt 2>/dev/null || echo "")
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ "$latest" != "$last_built" ]; then
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record new commit and trigger a build
+        if: steps.check.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          mkdir -p .state
+          echo "$LATEST" > .state/last-built-sha.txt
+          git config user.name "caspahub-releases-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .state/last-built-sha.txt
+          git commit -m "Auto-build: caspahub-flutter@${LATEST:0:7}"
+          git push
+          gh workflow run release.yml --repo "${{ github.repository }}" \
+            -f ref="$LATEST" \
+            -f release_tag="auto-${LATEST:0:7}"
