@@ -45,6 +45,9 @@ jobs:
       - name: Generate launcher icon
         run: dart run flutter_launcher_icons
 
+      - name: Enable R8 shrinking
+        run: python3 tool/patch_android_release.py
+
       - name: Analyze
         run: flutter analyze
 
