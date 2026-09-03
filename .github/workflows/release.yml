@@ -39,6 +39,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Writes the real CaspaHub mark into android's mipmap-*/, overwriting the default
+      # Flutter icon `flutter create` just generated above. Config in pubspec.yaml under
+      # `flutter_launcher_icons:`.
+      - name: Generate launcher icon
+        run: dart run flutter_launcher_icons
+
       - name: Analyze
         run: flutter analyze
 
