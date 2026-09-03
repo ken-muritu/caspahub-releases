@@ -51,10 +51,25 @@ jobs:
       - name: Patch manifest for in-app updates
         run: python3 tool/patch_android_manifest.py
 
+      # See tool/patch_android_signing.py — without this, release builds sign with a
+      # different random debug keystore on every CI run (ephemeral runners, nothing under
+      # ~/.android persists), and Android refuses to install an update signed with a
+      # different key than what's already on the device ("App not installed").
+      - name: Decode release keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore.p12
+
+      - name: Wire persistent release signing
+        run: python3 tool/patch_android_signing.py
+
       - name: Analyze
         run: flutter analyze
 
       - name: Build APK (release, split per ABI)
+        env:
+          ANDROID_KEYSTORE_PATH: release.keystore.p12
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release --split-per-abi
 
       - uses: actions/upload-artifact@v4
