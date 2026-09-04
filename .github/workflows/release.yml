@@ -96,9 +96,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # auto-<sha> tags (the hourly poller) are marked --prerelease so GitHub's
+          # releases/latest (and therefore the website's direct-download link, which
+          # points at releases/latest/download/<filename> — see caspahub-booking's
+          # install-prompt.tsx) always resolves to the most recent deliberately-cut
+          # vX.Y.Z release, never an unvetted auto-build.
+          PRERELEASE_FLAG=""
+          if [[ "${{ inputs.release_tag }}" == auto-* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
           gh release create "${{ inputs.release_tag }}" \
             dist/apk-arm64/app-arm64-v8a-release.apk \
             dist/apk-armv7/app-armeabi-v7a-release.apk \
             --repo "${{ github.repository }}" \
             --title "${{ inputs.release_tag }}" \
+            $PRERELEASE_FLAG \
             --notes "Built from ken-muritu/caspahub-flutter@${{ inputs.ref }}. Source is private; this repo only hosts the build+release while GitHub Actions billing is blocked on the main account."
